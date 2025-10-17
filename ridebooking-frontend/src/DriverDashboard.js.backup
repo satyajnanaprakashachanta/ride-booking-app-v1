@@ -1,0 +1,532 @@
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import DriverRideDetails from "./DriverRideDetails";
+
+function DriverDashboard({ userInfo }) {
+  const [pendingBookings, setPendingBookings] = useState([]);
+  const [acceptedBookings, setAcceptedBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showRideDetails, setShowRideDetails] = useState(false);
+  const [activeTab, setActiveTab] = useState("available"); // "available" or "accepted"
+  
+  // Driver identification states
+  const [isDriverReady, setIsDriverReady] = useState(false);
+  const [currentDriverId, setCurrentDriverId] = useState(null);
+
+  useEffect(() => {
+    // Auto-setup driver when component loads
+    setupDriver();
+  }, []);
+
+  useEffect(() => {
+    if (isDriverReady) {
+      fetchPendingBookings();
+      fetchAcceptedBookings();
+    }
+  }, [isDriverReady]);
+
+    const setupDriver = async () => {
+    try {
+      // Find or create driver user for compatibility with existing system
+      const usersResponse = await axios.get("http://localhost:8081/users");
+      let driver = usersResponse.data.find(user => 
+        user.role === "DRIVER" && 
+        user.name === userInfo.fullName && 
+        user.phoneNumber === userInfo.mobileNumber
+      );
+
+      if (!driver) {
+        // Create new driver profile
+        const newDriverResponse = await axios.post("http://localhost:8081/users", {
+          name: userInfo.fullName,
+          email: `${userInfo.fullName.toLowerCase().replace(/\s+/g, '')}@driver.com`,
+          phoneNumber: userInfo.mobileNumber,
+          role: "DRIVER",
+          status: "ACTIVE"
+        });
+        driver = newDriverResponse.data;
+      }
+
+      setCurrentDriverId(driver.userId);
+      setIsDriverReady(true);
+    } catch (error) {
+      console.error("Error setting up driver:", error);
+      alert("Error setting up driver profile. Please try again.");
+    }
+  };
+
+  const fetchPendingBookings = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get("http://localhost:8081/bookings");
+      // Show all REQUESTED bookings that any driver can accept
+      // BUT exclude bookings where the current user is the rider (can't accept own requests)
+      const driverBookings = response.data.filter(
+        booking => {
+          // Basic filters
+          if (!booking.ride || booking.status !== "REQUESTED") {
+            return false;
+          }
+
+          // 🚫 PREVENT SELF-BOOKING: Multiple checks to ensure user can't accept their own rides
+          
+          // Check 1: Rider name and phone match
+          if (booking.rider && 
+              booking.rider.name === userInfo.fullName && 
+              booking.rider.phoneNumber === userInfo.mobileNumber) {
+            console.log(`🚫 Blocked self-booking attempt: Rider match for booking ${booking.bookingId}`);
+            return false;
+          }
+
+          // Check 2: Rider phone matches current user (safety check)
+          if (booking.riderPhone === userInfo.mobileNumber) {
+            console.log(`🚫 Blocked self-booking attempt: Phone match for booking ${booking.bookingId}`);
+            return false;
+          }
+
+          // Check 3: If the ride was created by the same user (driver ID check)
+          if (booking.ride.driver && 
+              booking.ride.driver.phoneNumber === userInfo.mobileNumber) {
+            console.log(`🚫 Blocked self-booking attempt: Driver match for booking ${booking.bookingId}`);
+            return false;
+          }
+
+          // Check 4: Additional safety - check if rider ID matches current driver ID
+          if (booking.riderId === currentDriverId) {
+            console.log(`🚫 Blocked self-booking attempt: User ID match for booking ${booking.bookingId}`);
+            return false;
+          }
+
+          return true;
+        }
+      );
+      setPendingBookings(driverBookings);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching bookings:", error);
+      setError("Failed to load booking requests");
+      setLoading(false);
+    }
+  };
+
+  const fetchAcceptedBookings = async () => {
+    try {
+      const response = await axios.get("http://localhost:8081/bookings");
+      // Show bookings that this driver has accepted
+      const myAcceptedBookings = response.data.filter(
+        booking => booking.status === "ACCEPTED" && 
+                  booking.ride && 
+                  booking.ride.driver && 
+                  booking.ride.driver.phoneNumber === userInfo.mobileNumber
+      );
+      setAcceptedBookings(myAcceptedBookings);
+    } catch (error) {
+      console.error("Error fetching accepted bookings:", error);
+    }
+  };
+
+  const handleAcceptBooking = async (bookingId) => {
+    try {
+      // 🚫 FRONTEND SAFETY CHECK: Double-check before accepting
+      const booking = pendingBookings.find(b => b.bookingId === bookingId);
+      if (booking) {
+        // Check if this is user's own booking
+        if (booking.riderPhone === userInfo.mobileNumber || 
+            (booking.rider && booking.rider.phoneNumber === userInfo.mobileNumber) ||
+            booking.riderId === currentDriverId) {
+          alert("🚫 Error: You cannot accept your own ride request!");
+          return;
+        }
+      }
+
+      await axios.put(`http://localhost:8081/bookings/${bookingId}/accept?driverId=${currentDriverId}`);
+      
+      // Update the booking with current driver details
+      await updateBookingDriverDetails(bookingId);
+      
+      // Refresh both lists
+      fetchPendingBookings();
+      fetchAcceptedBookings();
+      alert("✅ Ride request accepted!");
+    } catch (error) {
+      console.error("Error accepting booking:", error);
+      // Show more specific error message if it's a self-booking attempt
+      if (error.response && error.response.data && error.response.data.includes("SELF-BOOKING BLOCKED")) {
+        alert("🚫 " + error.response.data);
+      } else {
+        alert("❌ Failed to accept booking. Please try again.");
+      }
+    }
+  };
+
+  const handleRejectBooking = async (bookingId) => {
+    try {
+      await axios.put(`http://localhost:8081/bookings/${bookingId}/reject?driverId=${currentDriverId}`);
+      // Refresh the bookings list
+      fetchPendingBookings();
+      alert("❌ Ride request rejected.");
+    } catch (error) {
+      console.error("Error rejecting booking:", error);
+      alert("❌ Failed to reject booking. Please try again.");
+    }
+  };
+
+  const updateBookingDriverDetails = async (bookingId) => {
+    try {
+      // This would ideally be handled by the backend, but for now we can log it
+      console.log(`Booking ${bookingId} accepted by driver: ${userInfo.fullName} (${userInfo.mobileNumber})`);
+    } catch (error) {
+      console.error("Error updating driver details:", error);
+    }
+  };
+
+  const formatTime = (timeString) => {
+    if (!timeString) return "Not specified";
+    // If it's in HH:MM format, return as is
+    if (timeString.match(/^\d{2}:\d{2}$/)) {
+      return timeString;
+    }
+    // If it's a full datetime, extract time
+    try {
+      return new Date(timeString).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return timeString;
+    }
+  };
+
+  if (showRideDetails) {
+    return <DriverRideDetails onBack={() => setShowRideDetails(false)} />;
+  }
+
+  // Show loading while setting up driver profile
+  if (!isDriverReady) {
+    return (
+      <div style={{ maxWidth: "500px", margin: "0 auto", padding: "20px", textAlign: "center" }}>
+        <div style={{ 
+          backgroundColor: "#f8f9fa", 
+          padding: "30px", 
+          borderRadius: "15px", 
+          border: "1px solid #dee2e6" 
+        }}>
+          <h2 style={{ color: "#333", marginBottom: "15px" }}>🚗 Setting Up Driver Mode</h2>
+          <p style={{ color: "#666", fontSize: "16px", marginBottom: "20px" }}>
+            Preparing your driver dashboard...
+          </p>
+          <div style={{ 
+            backgroundColor: "#e3f2fd", 
+            padding: "15px", 
+            borderRadius: "8px",
+            marginBottom: "15px"
+          }}>
+            <p style={{ margin: "5px 0", color: "#1565c0" }}>
+              <strong>Driver:</strong> {userInfo.fullName}
+            </p>
+            <p style={{ margin: "5px 0", color: "#1565c0" }}>
+              <strong>Mobile:</strong> {userInfo.mobileNumber}
+            </p>
+          </div>
+          <div style={{ fontSize: "14px", color: "#666" }}>
+            � Please wait while we set up your driver profile...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: "50px" }}>
+        <h2>🔄 Loading requests...</h2>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ textAlign: "center", padding: "50px" }}>
+        <h2>❌ {error}</h2>
+        <button onClick={fetchPendingBookings} style={{ padding: "10px 20px", margin: "10px" }}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: "800px", margin: "0 auto" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px" }}>
+        <div>
+          <h2>🚗 Driver Dashboard</h2>
+          <p style={{ color: "#666", margin: "5px 0" }}>
+            Welcome, <strong>{userInfo.fullName}</strong>
+          </p>
+        </div>
+        <button 
+          onClick={() => {
+            setIsDriverReady(false);
+            setCurrentDriverId(null);
+            window.location.reload();
+          }}
+          style={{ 
+            padding: "10px 20px", 
+            backgroundColor: "#6c757d", 
+            color: "white", 
+            border: "none", 
+            borderRadius: "5px",
+            cursor: "pointer"
+          }}
+        >
+          🚪 Exit Driver Mode
+        </button>
+      </div>
+
+      {/* Tab Navigation */}
+      <div style={{ display: "flex", marginBottom: "20px", borderBottom: "2px solid #e9ecef" }}>
+        <button
+          onClick={() => setActiveTab("available")}
+          style={{
+            padding: "15px 25px",
+            backgroundColor: activeTab === "available" ? "#007bff" : "transparent",
+            color: activeTab === "available" ? "white" : "#007bff",
+            border: "none",
+            borderRadius: "10px 10px 0 0",
+            cursor: "pointer",
+            fontSize: "16px",
+            fontWeight: "bold",
+            marginRight: "5px"
+          }}
+        >
+          📋 Available Rides ({pendingBookings.length})
+        </button>
+        <button
+          onClick={() => setActiveTab("accepted")}
+          style={{
+            padding: "15px 25px",
+            backgroundColor: activeTab === "accepted" ? "#28a745" : "transparent",
+            color: activeTab === "accepted" ? "white" : "#28a745",
+            border: "none",
+            borderRadius: "10px 10px 0 0",
+            cursor: "pointer",
+            fontSize: "16px",
+            fontWeight: "bold"
+          }}
+        >
+          ✅ My Accepted Rides ({acceptedBookings.length})
+        </button>
+      </div>
+
+      {/* Refresh button */}
+      <button 
+        onClick={() => {
+          fetchPendingBookings();
+          fetchAcceptedBookings();
+        }}
+        style={{ 
+          padding: "10px 20px", 
+          backgroundColor: "#17a2b8", 
+          color: "white", 
+          border: "none", 
+          borderRadius: "5px",
+          cursor: "pointer",
+          marginBottom: "20px"
+        }}
+      >
+        🔄 Refresh Data
+      </button>
+
+      {/* Tab Content */}
+      {activeTab === "available" && (
+        <div>
+          {/* Info about filtering */}
+          <div style={{ 
+            backgroundColor: "#e8f5e8", 
+            padding: "15px", 
+            borderRadius: "10px", 
+            border: "1px solid #c3e6c3",
+            marginBottom: "20px"
+          }}>
+            <p style={{ color: "#2e7d32", margin: "0", fontSize: "14px" }}>
+              💡 <strong>Available Rides:</strong> These are ride requests from passengers that you can accept. 
+              Your own ride requests are automatically filtered out.
+            </p>
+          </div>
+
+          {pendingBookings.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "50px", backgroundColor: "#f8f9fa", borderRadius: "10px" }}>
+              <h3>📭 No available ride requests</h3>
+              <p>New ride requests will appear here automatically.</p>
+            </div>
+          ) : (
+            <div>
+              {pendingBookings.map((booking) => (
+                <div key={booking.bookingId} style={{ 
+                  border: "2px solid #ffc107", 
+                  borderRadius: "15px", 
+                  padding: "20px", 
+                  marginBottom: "20px", 
+                  backgroundColor: "#fff8e1"
+                }}>
+                  <div style={{ textAlign: "center", marginBottom: "15px" }}>
+                    <h3 style={{ color: "#f57c00", marginTop: "0" }}>
+                      🚖 Ride Request #{booking.bookingId}
+                    </h3>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "15px" }}>
+                    <div>
+                      <p><strong>👤 Passenger:</strong> {booking.riderName}</p>
+                      <p><strong>📱 Phone:</strong> {booking.riderPhone}</p>
+                    </div>
+                    <div>
+                      <p><strong>📍 From:</strong> {booking.pickupLocation}</p>
+                      <p><strong>🎯 To:</strong> {booking.dropLocation}</p>
+                      <p><strong>⏰ Time:</strong> {formatTime(booking.rideTime)}</p>
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: "center", marginBottom: "15px" }}>
+                    <span style={{ marginRight: "20px" }}>
+                      <strong>📏 Distance:</strong> {booking.distanceInMiles || booking.ride?.distanceInMiles} miles
+                    </span>
+                    <span>
+                      <strong>💰 Fare:</strong> ${booking.fare || booking.ride?.price}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "center", gap: "15px" }}>
+                    <button
+                      onClick={() => handleAcceptBooking(booking.bookingId)}
+                      style={{
+                        padding: "12px 25px",
+                        backgroundColor: "#28a745",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontSize: "16px",
+                        fontWeight: "bold"
+                      }}
+                    >
+                      ✅ Accept
+                    </button>
+                    <button
+                      onClick={() => handleRejectBooking(booking.bookingId)}
+                      style={{
+                        padding: "12px 25px",
+                        backgroundColor: "#dc3545",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontSize: "16px",
+                        fontWeight: "bold"
+                      }}
+                    >
+                      ❌ Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Accepted Rides Tab */}
+      {activeTab === "accepted" && (
+        <div>
+          <div style={{ 
+            backgroundColor: "#d4edda", 
+            padding: "15px", 
+            borderRadius: "10px", 
+            border: "1px solid #c3e6cb",
+            marginBottom: "20px"
+          }}>
+            <p style={{ color: "#155724", margin: "0", fontSize: "14px" }}>
+              ✅ <strong>My Accepted Rides:</strong> These are rides you have accepted and are responsible for completing.
+            </p>
+          </div>
+
+          {acceptedBookings.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "50px", backgroundColor: "#f8f9fa", borderRadius: "10px" }}>
+              <h3>📭 No accepted rides</h3>
+              <p>Rides you accept will appear here.</p>
+            </div>
+          ) : (
+            <div>
+              {acceptedBookings.map((booking) => (
+                <div key={booking.bookingId} style={{ 
+                  border: "2px solid #28a745", 
+                  borderRadius: "15px", 
+                  padding: "20px", 
+                  marginBottom: "20px", 
+                  backgroundColor: "#d4edda"
+                }}>
+                  <div style={{ textAlign: "center", marginBottom: "15px" }}>
+                    <h3 style={{ color: "#155724", marginTop: "0" }}>
+                      ✅ Accepted Ride #{booking.bookingId}
+                    </h3>
+                    <div style={{ 
+                      backgroundColor: "#28a745", 
+                      color: "white",
+                      borderRadius: "20px", 
+                      padding: "8px 16px", 
+                      display: "inline-block",
+                      fontSize: "14px",
+                      fontWeight: "bold"
+                    }}>
+                      🚗 YOU ARE THE DRIVER
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "15px" }}>
+                    <div>
+                      <p><strong>👤 Passenger:</strong> {booking.riderName}</p>
+                      <p><strong>📱 Phone:</strong> {booking.riderPhone}</p>
+                    </div>
+                    <div>
+                      <p><strong>📍 From:</strong> {booking.pickupLocation}</p>
+                      <p><strong>🎯 To:</strong> {booking.dropLocation}</p>
+                      <p><strong>⏰ Time:</strong> {formatTime(booking.rideTime)}</p>
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: "center", marginBottom: "15px" }}>
+                    <span style={{ marginRight: "20px" }}>
+                      <strong>📏 Distance:</strong> {booking.distanceInMiles || booking.ride?.distanceInMiles} miles
+                    </span>
+                    <span>
+                      <strong>💰 Earnings:</strong> ${booking.fare || booking.ride?.price}
+                    </span>
+                  </div>
+
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ 
+                      backgroundColor: "#fff", 
+                      padding: "10px", 
+                      borderRadius: "8px", 
+                      border: "1px solid #28a745",
+                      display: "inline-block"
+                    }}>
+                      <strong style={{ color: "#155724" }}>
+                        📱 Contact passenger to coordinate pickup
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default DriverDashboard;
