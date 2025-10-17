@@ -50,4 +50,4 @@ export const isPastBooking = (booking) => {
 ## 📱 **User Experience:**
 After this fix, when a driver accepts a ride, the rider will immediately see it in their booking history under "Past Rides" section with status "Accepted".
 
-**Your booking history should now work perfectly!** 🚀
+**Your booking history should now work perfectly!**

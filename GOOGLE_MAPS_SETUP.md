@@ -15,7 +15,7 @@ If you're not seeing autocomplete suggestions, it's because the Google Maps API 
 4. **Select any suggestion** to see auto-calculation work
 5. **Notice the message**: "📍 Mock suggestions (configure Google Maps API for real data)"
 
-## 🚀 To Get Real Google Maps Suggestions
+## To Get Real Google Maps Suggestions
 
 ### Step 1: Get Your API Key (5 minutes)
 
@@ -125,7 +125,7 @@ Even without configuring Google Maps, you can test the full functionality:
 
 The system is **fully functional** with mock data for immediate testing and development!
 
-## 🚀 Benefits of This Approach
+## Benefits of This Approach
 
 ### ✅ **Immediate Testing**
 - No API setup required to test the feature

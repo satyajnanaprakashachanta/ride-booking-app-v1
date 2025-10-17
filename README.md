@@ -1,8 +1,8 @@
 # Ride Booking App - Version 1.0
 
-A comprehensive ride-sharing application built with **Spring Boot** backend and **React** frontend, featuring real-time location services and complete booking management.
+A comprehensive ride-sharing platform built with Spring Boot backend and React frontend.
 
-## 🚀 Features
+## Features
 
 ### Core Functionality
 - **Dual User Roles**: Riders and Drivers with separate dashboards
@@ -55,7 +55,7 @@ ridebooking/
 └── target/                    # Build output
 ```
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - **Java 17+**
@@ -164,7 +164,7 @@ ridebooking/
 - ✅ Responsive design for all devices
 - ✅ Scheduled booking cleanup system
 
-## 🚀 Future Enhancements
+## Future Enhancements
 
 - Real-time GPS tracking
 - Payment integration

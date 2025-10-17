@@ -42,7 +42,7 @@
 
 ---
 
-## 🚀 **Test Results:**
+## **Test Results:**
 
 ### ✅ **CORS Headers Confirmed Working:**
 ```

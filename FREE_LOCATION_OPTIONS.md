@@ -23,7 +23,9 @@
 
 ---
 
-## 🚀 **Test It Now**
+The app automatically calculates distance and fare based on actual coordinates!
+
+## **Test It Now**
 1. Refresh your browser
 2. Type "University of Memphis" in any location field
 3. You'll see real-time suggestions from around the world!

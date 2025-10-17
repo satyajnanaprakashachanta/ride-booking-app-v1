@@ -38,7 +38,7 @@ cd /Users/satyajnanaprakashachanta/Downloads/ridebooking
 - Mobile: `1123456789` (10 digits ✅)
 - Password: `****` (4 digits ✅)
 
-**This should now work perfectly!** 🚀
+**This should now work perfectly!**
 
 ## 🔍 **Quick Debug Steps:**
 

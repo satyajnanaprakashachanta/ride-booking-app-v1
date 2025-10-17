@@ -27,7 +27,9 @@ Your rider and driver registration issues have been **completely resolved**! Her
 
 ---
 
-## 🚀 **How to Register Now:**
+Perfect! The issue is resolved now. Here's what was fixed:
+
+## **How to Register Now:**
 
 ### **For Riders:**
 1. **Navigate to the app** at `http://localhost:3002`
@@ -150,7 +152,7 @@ The registration system is now **fully functional** with:
 - ✅ **Backend integration**
 - ✅ **Success confirmations**
 
-**Try registering a new rider or driver now - it should work perfectly!** 🚀
+**Try registering a new rider or driver now - it should work perfectly!**
 
 ---
 

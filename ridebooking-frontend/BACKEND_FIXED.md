@@ -1,4 +1,4 @@
-# 🚀 **Backend Server Fixed & Running!**
+# **Backend Server Fixed & Running!**
 
 ## ✅ **Problem Solved:**
 

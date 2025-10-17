@@ -11,7 +11,7 @@ Your ride booking app now has **real-time location autocomplete** that works for
 - **Coverage**: Worldwide locations
 - **Limits**: Unlimited usage
 
-## 🚀 **How to Test**
+## **How to Test**
 
 1. **Refresh your browser**
 2. **Go to the booking form**
